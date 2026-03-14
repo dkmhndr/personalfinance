@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pdf from 'pdf-parse';
+import * as pdfModule from 'pdf-parse';
 import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 
 type ParsedRow = {
@@ -60,6 +60,7 @@ async function readPdfBuffer(req: NextRequest): Promise<Buffer> {
 
 export async function POST(req: NextRequest) {
   try {
+    const pdf = (pdfModule as any).default || (pdfModule as any);
     const buffer = await readPdfBuffer(req);
     const parsed = await pdf(buffer);
     const rows = parseStatementText(parsed.text || '');
