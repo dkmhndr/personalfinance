@@ -2,6 +2,36 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
 
 export type CategorizationSource = 'manual' | 'rule' | 'ai' | 'none';
 
+export type CategoryType =
+  | 'Income:Salary'
+  | 'Income:Bonus'
+  | 'Income:Investment'
+  | 'Income:Other'
+  | 'Expense:Housing'
+  | 'Expense:Utilities'
+  | 'Expense:Food & Dining'
+  | 'Expense:Groceries'
+  | 'Expense:Transport'
+  | 'Expense:Healthcare'
+  | 'Expense:Education'
+  | 'Expense:Entertainment'
+  | 'Expense:Shopping'
+  | 'Expense:Fees & Charges'
+  | 'Expense:Subscriptions'
+  | 'Expense:Travel'
+  | 'Transfer'
+  | 'Saving'
+  | 'Uncategorized';
+
+export type CategorizationResult = {
+  items: Array<{
+    id: string;
+    category: CategoryType;
+    note?: string;
+    confidence?: number;
+  }>;
+};
+
 export interface Account {
   id: string;
   name: string;

@@ -41,7 +41,7 @@ const keywords: Array<{ pattern: RegExp; category: CategoryType; note?: string }
 const BATCH_SIZE = 50;
 
 function heuristicCategorize(transactions: { id: string; description: string; amount: number }[]): CategorizationResult {
-  const items = transactions.map((tx) => {
+  const items = transactions.map((tx): CategorizationResult['items'][number] => {
     const desc = tx.description.toLowerCase();
     const absAmt = Math.abs(tx.amount);
 

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase';
+import type { PostgrestSingleResponse } from '@supabase/supabase-js';
 import { type DashboardFilters } from '@/types';
 
 const baseSelect = '*, categories(*), accounts(name)';
@@ -22,7 +23,7 @@ function applyFilters(query: any, filters: DashboardFilters) {
  * queryFactory must return a fresh builder for each page because range() mutates the builder.
  */
 async function fetchAll<T = any>(
-  queryFactory: (from: number, to: number) => ReturnType<typeof supabaseAdmin.from>,
+  queryFactory: (from: number, to: number) => PromiseLike<PostgrestSingleResponse<T[]>>,
 ): Promise<T[]> {
   let from = 0;
   const rows: T[] = [];

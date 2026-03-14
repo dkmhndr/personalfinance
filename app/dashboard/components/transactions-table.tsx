@@ -98,7 +98,6 @@ export function TransactionsTable({ data, categories, onManualChange, hide }: Pr
     columns,
     state: { sorting },
     onSortingChange: setSorting,
-    columnSizing: true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });

@@ -5,6 +5,7 @@ import { syncBankStatements } from '@/lib/sync';
 type RawRow = {
   id?: number | string;
   transaction_at?: string;
+  created_at?: string;
   from_or_to?: string;
   remark?: string;
   type?: string;

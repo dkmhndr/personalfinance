@@ -54,7 +54,7 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
   const [loading, setLoading] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
 
-  const withBucket = (base: DashboardFilters) => {
+  const withBucket = (base: DashboardFilters): DashboardFilters => {
     if (base.startDate && base.endDate) {
       const diff = Math.abs(
         new Date(base.endDate).getTime() - new Date(base.startDate).getTime(),
@@ -66,7 +66,10 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
     return { ...base, bucket: "month" };
   };
 
-  const fetchData = async (nextFilters = filters, nextPage = page) => {
+  const fetchData = async (
+    nextFilters: DashboardFilters = filters,
+    nextPage = page,
+  ) => {
     const effectiveFilters = withBucket(nextFilters);
     setLoading(true);
     const qs = new URLSearchParams({
