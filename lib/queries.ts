@@ -144,38 +144,26 @@ export async function fetchExpenseByCategory(filters: DashboardFilters) {
 }
 
 export async function fetchCashflowTrend(filters: DashboardFilters) {
-  // Determine min/max dates
-  const startRaw = filters.startDate || '1970-01-01';
-  const endRaw = filters.endDate || new Date().toISOString();
+  // Aggregate directly from filtered transactions so the cashflow chart
+  // always honors date/category/source/type filters consistently.
+  const data = await fetchAll<{ amount: number; type: string; transaction_at: string }>((from, to) =>
+    applyFilters(
+      supabaseAdmin.from('transactions').select('amount,type,transaction_at').range(from, to),
+      filters,
+    ),
+  );
 
-  // Try SQL RPC first (best performance)
-  try {
-    const { data, error } = await supabaseAdmin.rpc('cashflow_monthly', {
-      p_start: startRaw,
-      p_end: endRaw,
-    });
-    if (error) throw error;
-    const rows: { period: string; income: number; expense: number }[] = data || [];
-    return rows;
-  } catch (err) {
-    // Fallback: fetch all rows and aggregate in JS (still paged to avoid 1k cap)
-    const data = await fetchAll<{ amount: number; type: string; transaction_at: string }>((from, to) =>
-      applyFilters(
-        supabaseAdmin.from('transactions').select('amount,type,transaction_at').range(from, to),
-        filters,
-      ),
-    );
-    const map: Record<string, { income: number; expense: number }> = {};
-    data.forEach((row) => {
-      const key = row.transaction_at.slice(0, 7); // YYYY-MM
-      if (!map[key]) map[key] = { income: 0, expense: 0 };
-      if (row.type === 'income') map[key].income += Number(row.amount);
-      if (row.type === 'expense') map[key].expense += Number(row.amount);
-    });
-    return Object.entries(map)
-      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-      .map(([period, { income, expense }]) => ({ period, income, expense }));
-  }
+  const map: Record<string, { income: number; expense: number }> = {};
+  data.forEach((row) => {
+    const key = row.transaction_at.slice(0, 7); // YYYY-MM
+    if (!map[key]) map[key] = { income: 0, expense: 0 };
+    if (row.type === 'income') map[key].income += Number(row.amount);
+    if (row.type === 'expense') map[key].expense += Number(row.amount);
+  });
+
+  return Object.entries(map)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([period, { income, expense }]) => ({ period, income, expense }));
 }
 
 export async function fetchTransactions(filters: DashboardFilters, page = 1, pageSize = 20) {
