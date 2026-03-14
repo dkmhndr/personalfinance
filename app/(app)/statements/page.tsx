@@ -14,7 +14,7 @@ export default async function StatementsPage() {
     <main className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">Raw Statements</h1>
-        <p className="text-sm text-muted">Edit amount/remark/type if parsing salah; normalized transaction will re-sync otomatis.</p>
+        <p className="text-sm text-muted">Adjust amounts, remarks, or types if parsing is incorrect; normalized transactions re-sync automatically.</p>
       </div>
       <StatementsClient initial={data || []} />
     </main>

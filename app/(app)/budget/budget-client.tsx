@@ -41,7 +41,7 @@ const tempId = () => `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 export default function BudgetClient({ categories }: Props) {
   const [period, setPeriod] = useState<string>(nextMonth());
-  const [scenario, setScenario] = useState<string>("base");
+  const [scenario, setScenario] = useState<string>("Plan A");
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [lines, setLines] = useState<BudgetUILine[]>([]);
   const [baseLines, setBaseLines] = useState<BudgetUILine[]>([]);
@@ -94,7 +94,7 @@ export default function BudgetClient({ categories }: Props) {
     const qs = new URLSearchParams({ period: nextPeriod, scenario: nextScenario });
     const res = await fetch(`/api/budgets?${qs.toString()}`);
     if (!res.ok) {
-      setError("Gagal mengambil data budget.");
+      setError("Failed to load budget data.");
       setLoading(false);
       return;
     }
@@ -164,7 +164,7 @@ export default function BudgetClient({ categories }: Props) {
     const qs = new URLSearchParams({ period: fromPeriod, scenario });
     const res = await fetch(`/api/budgets?${qs.toString()}`);
     if (!res.ok) {
-      setError("Gagal copy dari bulan lalu.");
+      setError("Failed to copy last month.");
       return;
     }
     const json = (await res.json()) as BudgetSnapshot;
@@ -201,7 +201,7 @@ export default function BudgetClient({ categories }: Props) {
     });
     setSaving(false);
     if (!res.ok) {
-      setError("Gagal menyimpan budget.");
+      setError("Failed to save budget.");
       return;
     }
     fetchSnapshot(period, scenario);
@@ -213,15 +213,13 @@ export default function BudgetClient({ categories }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-brand-200">Plan</p>
           <h2 className="text-2xl font-semibold">Budget Planner</h2>
-          <p className="text-sm text-muted">
-            Simulasikan dulu di frontend, baru simpan saat sudah cocok.
-          </p>
+          <p className="text-sm text-muted">Plan scenarios, review totals, save.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {dirty ? <Badge className="bg-amber-500/20 text-amber-100">Unsaved changes</Badge> : null}
           <Button variant="outline" size="sm" onClick={() => setHideAmounts((v) => !v)}>
             {hideAmounts ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -231,8 +229,8 @@ export default function BudgetClient({ categories }: Props) {
       </div>
 
       <Card>
-        <CardHeader className="items-start gap-3 md:flex-row md:items-center">
-          <div className="flex gap-3 flex-1 flex-wrap">
+        <CardHeader className="items-start gap-2.5 lg:flex-row lg:items-center">
+          <div className="flex gap-2.5 flex-1 flex-wrap">
             <div className="space-y-1">
               <div className="text-xs uppercase text-muted">Period</div>
               <Input
@@ -243,36 +241,57 @@ export default function BudgetClient({ categories }: Props) {
               />
             </div>
             <div className="space-y-1">
-              <div className="text-xs uppercase text-muted">Scenario</div>
+              <div className="text-xs uppercase text-muted">Name</div>
               <Input
                 value={scenario}
                 onChange={(e) => handleScenarioChange(e.target.value)}
                 className="w-40"
-                placeholder="base"
+                placeholder="Plan name"
               />
-              <div className="text-[11px] text-muted">Isi nama lain kalau mau skenario alternatif.</div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={copyLastMonth}>
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2 py-1"
+              aria-label="Copy last month"
+              onClick={copyLastMonth}
+            >
               <Copy size={16} />
-              Copy last month (local)
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => fetchSnapshot()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2 py-1"
+              aria-label="Reload"
+              onClick={() => fetchSnapshot()}
+            >
               <RefreshCw size={16} />
-              Reload
             </Button>
-            <Button variant="outline" size="sm" onClick={resetLocal} disabled={!dirty}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2 py-1"
+              aria-label="Discard changes"
+              onClick={resetLocal}
+              disabled={!dirty}
+            >
               <Undo2 size={16} />
-              Discard
             </Button>
-            <Button variant="primary" size="sm" onClick={saveAll} disabled={!dirty || saving}>
-              <Save size={16} />
-              {saving ? "Saving…" : "Save plan"}
+            <Button
+              variant="primary"
+              size="sm"
+              className="px-2 py-1"
+              aria-label="Save plan"
+              onClick={saveAll}
+              disabled={!dirty || saving}
+            >
+              {saving ? "…" : <Save size={16} />}
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
+        <CardContent className="grid gap-2.5 sm:grid-cols-3">
           <SummaryStat label="Planned Income" value={plannedTotals.income} hide={hideAmounts} />
           <SummaryStat label="Planned Expense" value={plannedTotals.expense} hide={hideAmounts} />
           <SummaryStat label="Net Cashflow" value={plannedTotals.net} hide={hideAmounts} />
@@ -334,14 +353,14 @@ export default function BudgetClient({ categories }: Props) {
 
 function SummaryStat({ label, value, hide }: { label: string; value: number; hide: boolean }) {
   return (
-    <Card className="bg-white/5">
-      <CardHeader className="mb-1 flex-row items-center justify-between">
-        <CardTitle className="text-sm text-muted">{label}</CardTitle>
+    <Card className="bg-white/5 h-full flex flex-col">
+      <CardHeader className="flex-row items-center justify-between mb-0 pb-1">
+        <CardTitle className="text-sm text-muted whitespace-nowrap">{label}</CardTitle>
         <Badge className={value >= 0 ? "bg-emerald-500/20 text-emerald-100" : "bg-rose-500/20 text-rose-50"}>
           {value >= 0 ? "Positive" : "Negative"}
         </Badge>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 pt-0">
         <div className="text-2xl font-semibold">{hide ? "••••" : formatCurrency(value)}</div>
       </CardContent>
     </Card>
@@ -362,11 +381,11 @@ function ReferenceStat({
   hide: boolean;
 }) {
   return (
-    <Card className="bg-surface2/60">
-      <CardHeader className="mb-1">
-        <CardTitle className="text-sm text-muted">{title}</CardTitle>
+    <Card className="bg-surface2/60 h-full flex flex-col">
+      <CardHeader className="mb-0 pb-1">
+        <CardTitle className="text-sm text-muted whitespace-nowrap">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-1 text-sm">
+      <CardContent className="flex-1 space-y-1 text-sm pt-0">
         <div className="flex items-center justify-between">
           <span>Income</span>
           <span className="text-emerald-200">{hide ? "••••" : formatCurrency(income)}</span>
@@ -417,15 +436,14 @@ function LineCard({
           {lines.length} items
         </Badge>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="overflow-x-auto">
-          <Table>
+      <CardContent className="space-y-3 pb-3">
+        <div className="overflow-x-auto rounded-lg border border-border/60 bg-surface2/40">
+          <Table className="[&_th]:px-2 [&_td]:px-2 [&_th]:py-2 [&_td]:py-2">
             <THead>
               <TR>
                 <TH>Label</TH>
                 {showCategory ? <TH>Category</TH> : null}
                 <TH>Amount</TH>
-                <TH>Recurring</TH>
                 <TH></TH>
               </TR>
             </THead>
@@ -475,20 +493,15 @@ function LineCard({
                   />
                 </TD>
                 <TD>
-                  <Select
-                    value={draft.recurrence}
-                    onChange={(e) =>
-                      setDraft({ ...draft, recurrence: (e.target.value as BudgetRecurrence) || "none" })
-                    }
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="px-2 py-1"
+                    aria-label="Add line"
+                    onClick={onAdd}
+                    disabled={!draft.label || !draft.amount}
                   >
-                    <option value="none">One-time</option>
-                    <option value="monthly">Monthly</option>
-                  </Select>
-                </TD>
-                <TD>
-                  <Button variant="primary" size="sm" onClick={onAdd} disabled={!draft.label || !draft.amount}>
                     <Plus size={16} />
-                    Add
                   </Button>
                 </TD>
               </TR>
@@ -548,21 +561,15 @@ function BudgetRow({
           }
         />
       </TD>
-      <TD>
-        <Select
-          value={line.recurrence}
-          onChange={(e) =>
-            onChangeLine(line.id, { recurrence: (e.target.value as BudgetRecurrence) || "none" })
-          }
-        >
-          <option value="none">One-time</option>
-          <option value="monthly">Monthly</option>
-        </Select>
-      </TD>
       <TD className="flex items-center gap-2 py-2">
-        <Button variant="ghost" size="sm" onClick={() => onDeleteLocal(line.id)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-2 py-1"
+          aria-label="Delete line"
+          onClick={() => onDeleteLocal(line.id)}
+        >
           <Trash2 size={16} />
-          Delete
         </Button>
       </TD>
     </TR>

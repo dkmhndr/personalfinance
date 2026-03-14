@@ -20,11 +20,8 @@ export default function AppShellLayout({ children }: { children: ReactNode }) {
           {[
             { href: '/', label: 'Dashboard' },
             { href: '/budget', label: 'Budget' },
-            { href: '/review', label: 'Review' },
-            { href: '/rules', label: 'Rules' },
-            { href: '/categories', label: 'Categories' },
-            { href: '/statements', label: 'Statements' },
             { href: '/import', label: 'Import' },
+            { href: '/data', label: 'Data' },
           ].map((item) => (
             <a
               key={item.href}

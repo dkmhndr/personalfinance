@@ -105,7 +105,7 @@ export function TransactionsTable({ data, categories, onManualChange, hide }: Pr
   return (
     <div className="glass">
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="[&_th]:px-2.5 [&_td]:px-2.5 [&_th]:py-2 [&_td]:py-2">
           <THead>
             {table.getHeaderGroups().map((hg) => (
               <TR key={hg.id}>

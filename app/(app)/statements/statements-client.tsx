@@ -100,7 +100,7 @@ export default function StatementsClient({ initial }: { initial: RawStatement[] 
         </div>
       </div>
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="[&_th]:px-2.5 [&_td]:px-2.5 [&_th]:py-2 [&_td]:py-2">
           <THead>
             <TR>
               <TH>ID</TH>

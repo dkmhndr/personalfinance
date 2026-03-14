@@ -8,7 +8,7 @@ export default function ImportPage() {
       <div>
         <h1 className="text-2xl font-semibold">Import Statements</h1>
         <p className="text-sm text-muted">
-          Drop a CSV or Bank Jago PDF, review the parsed rows, tweak if needed, then import and auto-sync to transactions.
+          Upload a CSV or Bank Jago PDF, review parsed rows, adjust as needed, then import and sync to transactions.
         </p>
       </div>
       <ImportClient />
