@@ -23,7 +23,7 @@ export default function AppShellLayout({ children }: { children: ReactNode }) {
             { href: '/rules', label: 'Rules' },
             { href: '/categories', label: 'Categories' },
             { href: '/statements', label: 'Statements' },
-            { href: '/import', label: 'Import CSV' },
+            { href: '/import', label: 'Import' },
           ].map((item) => (
             <a
               key={item.href}

@@ -125,9 +125,6 @@ export function FilterBar({ categories, onChange, initial }: Props) {
         <Badge onClick={() => quick('allTime')} className="cursor-pointer hover:bg-white/10">
           All Time
         </Badge>
-        <Button variant="outline" size="sm" onClick={() => handle('viewBy', local.viewBy === 'month' ? 'year' : 'month')}>
-          {local.viewBy === 'month' ? 'Monthly' : 'Yearly'}
-        </Button>
         <Button variant="ghost" size="sm" onClick={reset}>
           Reset
         </Button>

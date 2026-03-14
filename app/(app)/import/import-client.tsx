@@ -11,7 +11,7 @@ type ParsedRow = {
   transaction_at?: string;
   from_or_to?: string;
   remark?: string;
-  type?: string;
+  type?: 'cr' | 'db' | string;
   amount?: number;
   balance?: number;
 };
@@ -59,7 +59,56 @@ export default function ImportClient() {
   const [status, setStatus] = useState<'idle' | 'parsing' | 'uploading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
 
-  const handleFile = (file: File | null) => {
+  const isPdf = (file: File) =>
+    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  const normalizeType = (value: string | undefined): 'cr' | 'db' => {
+    const v = (value || '').toLowerCase();
+    if (v === 'cr' || v === 'credit' || v === 'c') return 'cr';
+    if (v === 'db' || v === 'debit' || v === 'd') return 'db';
+    return 'db';
+  };
+
+  const setRowValue = (index: number, key: keyof ParsedRow, value: any) => {
+    setRows((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, [key]: value } : row)),
+    );
+  };
+
+  const removeRow = (index: number) => {
+    setRows((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handlePdf = async (file: File) => {
+    setRows([]);
+    setStatus('parsing');
+    setMessage('Parsing PDF…');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/import/pdf', {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setStatus('error');
+        setMessage(err.message || 'PDF parse failed');
+        return;
+      }
+      const data = await res.json();
+      const parsedRows = (data.rows || []) as ParsedRow[];
+      setRows(parsedRows);
+      setStatus('idle');
+      setMessage(`Parsed ${parsedRows.length} rows. Review & edit before import.`);
+    } catch (err) {
+      console.error(err);
+      setStatus('error');
+      setMessage('PDF parse failed');
+    }
+  };
+
+  const handleCsv = (file: File) => {
     if (!file) return;
     setStatus('parsing');
     setMessage(null);
@@ -72,7 +121,7 @@ export default function ImportClient() {
           .filter(Boolean) as ParsedRow[];
         setRows(mapped);
         setStatus('idle');
-        setMessage(`Parsed ${mapped.length} rows`);
+        setMessage(`Parsed ${mapped.length} rows. Review & edit before import.`);
       },
       error: () => {
         setStatus('error');
@@ -81,14 +130,37 @@ export default function ImportClient() {
     });
   };
 
+  const handleFile = (file: File | null) => {
+    if (!file) return;
+    if (isPdf(file)) {
+      void handlePdf(file);
+    } else {
+      handleCsv(file);
+    }
+  };
+
   const upload = async () => {
     if (rows.length === 0) return;
     setStatus('uploading');
     setMessage(null);
+    const sanitized = rows.map((r, idx) => ({
+      id: r.id ?? Date.now() + idx,
+      transaction_at: r.transaction_at || new Date().toISOString(),
+      from_or_to: r.from_or_to || '',
+      remark: r.remark || '',
+      type: normalizeType(r.type),
+      amount: Number.isFinite(r.amount as number) ? Number(r.amount) : 0,
+      balance:
+        r.balance === null || r.balance === undefined
+          ? null
+          : Number.isFinite(r.balance as number)
+            ? Number(r.balance)
+            : null,
+    }));
     const res = await fetch('/api/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows }),
+      body: JSON.stringify({ rows: sanitized }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -104,11 +176,97 @@ export default function ImportClient() {
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
-        <Input type="file" accept=".csv,text/csv" onChange={(e) => handleFile(e.target.files?.[0] || null)} />
+        <Input
+          type="file"
+          accept=".csv,text/csv,application/pdf,.pdf"
+          onChange={(e) => handleFile(e.target.files?.[0] || null)}
+        />
         {rows.length > 0 && (
-          <div className="text-sm text-muted">
-            Ready to upload {rows.length} rows.
-          </div>
+          <>
+            <div className="text-sm text-muted">
+              Preview & edit ({rows.length} rows). Click “Import & Sync” to save your edits.
+            </div>
+            <div className="overflow-auto border rounded">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/30 text-left">
+                    <th className="px-2 py-1">Date</th>
+                    <th className="px-2 py-1">From/To</th>
+                    <th className="px-2 py-1">Remark</th>
+                    <th className="px-2 py-1">Type</th>
+                    <th className="px-2 py-1">Amount</th>
+                    <th className="px-2 py-1">Balance</th>
+                    <th className="px-2 py-1">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, idx) => (
+                    <tr key={`${row.id ?? idx}`} className="border-t">
+                      <td className="px-2 py-1">
+                        <Input
+                          value={row.transaction_at || ''}
+                          onChange={(e) => setRowValue(idx, 'transaction_at', e.target.value)}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input
+                          value={row.from_or_to || ''}
+                          onChange={(e) => setRowValue(idx, 'from_or_to', e.target.value)}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input
+                          value={row.remark || ''}
+                          onChange={(e) => setRowValue(idx, 'remark', e.target.value)}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <select
+                          className="h-9 w-full rounded border bg-background px-2"
+                          value={normalizeType(row.type)}
+                          onChange={(e) => setRowValue(idx, 'type', e.target.value)}
+                        >
+                          <option value="cr">cr (credit)</option>
+                          <option value="db">db (debit)</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input
+                          type="number"
+                          value={row.amount ?? ''}
+                          onChange={(e) =>
+                            setRowValue(
+                              idx,
+                              'amount',
+                              e.target.value === '' ? undefined : parseFloat(e.target.value),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input
+                          type="number"
+                          value={row.balance ?? ''}
+                          onChange={(e) =>
+                            setRowValue(
+                              idx,
+                              'balance',
+                              e.target.value === '' ? undefined : parseFloat(e.target.value),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Button variant="ghost" size="sm" onClick={() => removeRow(idx)}>
+                          Remove
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
         <Button onClick={upload} disabled={status === 'uploading' || rows.length === 0}>
           {status === 'uploading' ? 'Uploading & Syncing…' : 'Import & Sync'}
