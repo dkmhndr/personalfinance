@@ -4,12 +4,10 @@ import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 // pdfjs (used by pdf-parse) expects DOMMatrix in the global scope in Node.
 if (typeof (global as any).DOMMatrix === 'undefined') {
   try {
-    // Lazy-load to avoid impacting edge/runtime bundles if unused
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { DOMMatrix } = require('dommatrix');
-    (global as any).DOMMatrix = DOMMatrix;
+    const DomMatrixCtor = require('dommatrix'); // library exports the constructor as default
+    (global as any).DOMMatrix = DomMatrixCtor?.DOMMatrix || DomMatrixCtor;
   } catch (e) {
-    // If dommatrix is missing, pdf-parse will throw; bubble with a clearer message.
     console.warn('DOMMatrix polyfill missing; install `dommatrix` to parse PDFs.');
   }
 }
