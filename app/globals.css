@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: radial-gradient(circle at 12% 16%, rgba(34, 197, 94, 0.15), transparent 30%),
+    radial-gradient(circle at 80% 8%, rgba(59, 130, 246, 0.12), transparent 28%),
+    linear-gradient(135deg, #0a1020, #060914 45%);
+  color: #e5e7eb;
+  font-family: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  @apply box-border;
+}
+
+.glass {
+  @apply bg-surface/70 border border-border rounded-xl shadow-card backdrop-blur;
+}
+
+.container-wide {
+  @apply w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.panel {
+  @apply glass p-6;
+}
+
+.btn-primary {
+  @apply inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-brand-400 to-emerald-400 text-slate-900 font-semibold px-4 py-2 shadow-lg shadow-emerald-500/20 transition hover:translate-y-[-1px] active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed;
+}
