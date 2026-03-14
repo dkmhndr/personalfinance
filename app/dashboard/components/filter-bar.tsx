@@ -80,12 +80,14 @@ export function FilterBar({ categories, onChange, initial }: Props) {
           value={local.startDate ? local.startDate.slice(0, 10) : ''}
           onChange={(e) => handle('startDate', e.target.value ? new Date(e.target.value).toISOString() : undefined)}
           placeholder="Start"
+          className="max-w-full md:max-w-[180px]"
         />
         <Input
           type="date"
           value={local.endDate ? local.endDate.slice(0, 10) : ''}
           onChange={(e) => handle('endDate', e.target.value ? new Date(e.target.value).toISOString() : undefined)}
           placeholder="End"
+          className="max-w-full md:max-w-[180px]"
         />
         <Select value={local.categoryId || ''} onChange={(e) => handle('categoryId', e.target.value || undefined)}>
           <option value="">All categories</option>
