@@ -44,8 +44,9 @@ export async function GET(req: NextRequest) {
   const minDate = minRes.data?.transaction_at || new Date(now.getFullYear(), 0, 1).toISOString();
   const maxDate = maxRes.data?.transaction_at || now.toISOString();
 
-  // Cashflow chart: show at least last 3 months even if filter narrower
-  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString();
+  // Cashflow chart: show at least last 3 billing cycles (25th cutoff) even if filter narrower
+  // 3 cycles back = 25th of (month - 3)
+  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 25).toISOString();
   const cashStart = filters.startDate ? filters.startDate : minDate;
   const cashEnd = filters.endDate ? filters.endDate : maxDate;
   const effectiveCashStart = new Date(cashStart) > new Date(threeMonthsAgo) ? threeMonthsAgo : cashStart;

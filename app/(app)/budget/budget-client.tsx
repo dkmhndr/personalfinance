@@ -42,6 +42,7 @@ const tempId = () => `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`
 export default function BudgetClient({ categories }: Props) {
   const [period, setPeriod] = useState<string>(nextMonth());
   const [scenario, setScenario] = useState<string>("Plan A");
+  const [scenarioInput, setScenarioInput] = useState<string>("Plan A");
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [lines, setLines] = useState<BudgetUILine[]>([]);
   const [baseLines, setBaseLines] = useState<BudgetUILine[]>([]);
@@ -88,25 +89,35 @@ export default function BudgetClient({ categories }: Props) {
   const dirty =
     JSON.stringify(normalizeLines(lines)) !== JSON.stringify(normalizeLines(baseLines));
 
+  const normalizeScenario = (value: string) => value.trim() || "Plan A";
+
   const fetchSnapshot = async (nextPeriod = period, nextScenario = scenario) => {
+    const normalizedScenario = normalizeScenario(nextScenario);
     setLoading(true);
     setError(null);
-    const qs = new URLSearchParams({ period: nextPeriod, scenario: nextScenario });
-    const res = await fetch(`/api/budgets?${qs.toString()}`);
-    if (!res.ok) {
+    try {
+      const qs = new URLSearchParams({ period: nextPeriod, scenario: normalizedScenario });
+      const res = await fetch(`/api/budgets?${qs.toString()}`);
+      if (!res.ok) {
+        setError("Failed to load budget data.");
+        return;
+      }
+      const json = (await res.json()) as BudgetSnapshot;
+      setSnapshot(json);
+      setPeriod(nextPeriod);
+      setScenario(normalizedScenario);
+      setScenarioInput(normalizedScenario);
+      const hydrated: BudgetUILine[] = (json.lines || []).map((l) => ({
+        ...l,
+        amountInput: l.amount != null ? l.amount.toString() : "",
+      }));
+      setLines(hydrated);
+      setBaseLines(hydrated.map((l) => ({ ...l })));
+    } catch {
       setError("Failed to load budget data.");
+    } finally {
       setLoading(false);
-      return;
     }
-    const json = (await res.json()) as BudgetSnapshot;
-    setSnapshot(json);
-    const hydrated: BudgetUILine[] = (json.lines || []).map((l) => ({
-      ...l,
-      amountInput: l.amount != null ? l.amount.toString() : "",
-    }));
-    setLines(hydrated);
-    setBaseLines(hydrated.map((l) => ({ ...l })));
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -121,7 +132,7 @@ export default function BudgetClient({ categories }: Props) {
     const newLine: BudgetUILine = {
       id: tempId(),
       period,
-      scenario,
+      scenario: normalizeScenario(scenario),
       type,
       label: draft.label,
       amount: amountNum,
@@ -148,20 +159,17 @@ export default function BudgetClient({ categories }: Props) {
 
   const handlePeriodChange = (value: string) => {
     if (!value) return;
-    setPeriod(value);
-    fetchSnapshot(value, scenario);
+    fetchSnapshot(value, scenarioInput);
   };
 
-  const handleScenarioChange = (value: string) => {
-    const next = value || "base";
-    setScenario(next);
-    fetchSnapshot(period, next);
+  const applyScenarioChange = () => {
+    fetchSnapshot(period, scenarioInput);
   };
 
   const copyLastMonth = async () => {
     const [y, m] = period.split("-").map(Number);
     const fromPeriod = formatPeriod(new Date(y, m - 1, 1));
-    const qs = new URLSearchParams({ period: fromPeriod, scenario });
+    const qs = new URLSearchParams({ period: fromPeriod, scenario: normalizeScenario(scenarioInput) });
     const res = await fetch(`/api/budgets?${qs.toString()}`);
     if (!res.ok) {
       setError("Failed to copy last month.");
@@ -181,6 +189,16 @@ export default function BudgetClient({ categories }: Props) {
   const saveAll = async () => {
     setSaving(true);
     setError(null);
+    const effectiveScenario = normalizeScenario(scenarioInput);
+    if (baseLines.length > 0 && lines.length === 0) {
+      const allowDelete = window.confirm(
+        "This will clear all existing budget lines for this period/scenario. Continue?",
+      );
+      if (!allowDelete) {
+        setSaving(false);
+        return;
+      }
+    }
     const payload = lines.map((l) => {
       const amt = parseAmount(l);
       if (!Number.isFinite(amt)) throw new Error("Amount invalid");
@@ -197,14 +215,14 @@ export default function BudgetClient({ categories }: Props) {
     const res = await fetch("/api/budgets", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ period, scenario, lines: payload }),
+      body: JSON.stringify({ period, scenario: effectiveScenario, lines: payload }),
     });
     setSaving(false);
     if (!res.ok) {
       setError("Failed to save budget.");
       return;
     }
-    fetchSnapshot(period, scenario);
+    fetchSnapshot(period, effectiveScenario);
   };
 
   const resetLocal = () => setLines(baseLines.map((l) => ({ ...l })));
@@ -243,8 +261,15 @@ export default function BudgetClient({ categories }: Props) {
             <div className="space-y-1">
               <div className="text-xs uppercase text-muted">Name</div>
               <Input
-                value={scenario}
-                onChange={(e) => handleScenarioChange(e.target.value)}
+                value={scenarioInput}
+                onChange={(e) => setScenarioInput(e.target.value)}
+                onBlur={applyScenarioChange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyScenarioChange();
+                  }
+                }}
                 className="w-40"
                 placeholder="Plan name"
               />
@@ -265,7 +290,7 @@ export default function BudgetClient({ categories }: Props) {
               size="sm"
               className="px-2 py-1"
               aria-label="Reload"
-              onClick={() => fetchSnapshot()}
+              onClick={() => fetchSnapshot(period, scenarioInput)}
             >
               <RefreshCw size={16} />
             </Button>

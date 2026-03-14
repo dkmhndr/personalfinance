@@ -32,20 +32,28 @@ export function FilterBar({ categories, onChange, initial }: Props) {
       setLocal(next);
       onChange(next);
     };
+    const y = today.getFullYear();
+    const m = today.getMonth(); // 0-indexed
     if (range === 'thisMonth') {
-      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      // 25th of previous month → 24th of current month
+      start = new Date(y, m - 1, 25);
+      end = new Date(y, m, 24, 23, 59, 59, 999);
       setRange(start, end);
     } else if (range === 'lastMonth') {
-      start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      end = new Date(today.getFullYear(), today.getMonth(), 0);
+      // 25th of 2 months ago → 24th of previous month
+      start = new Date(y, m - 2, 25);
+      end = new Date(y, m - 1, 24, 23, 59, 59, 999);
       setRange(start, end);
     } else if (range === 'last3') {
-      start = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+      // 3 billing cycles: 25th of 3 months ago → 24th of current month
+      start = new Date(y, m - 3, 25);
+      end = new Date(y, m, 24, 23, 59, 59, 999);
       setRange(start, end);
     } else if (range === 'allTime') {
       setRange(undefined, undefined);
     } else {
-      start = new Date(today.getFullYear(), 0, 1);
+      // thisYear: 25 Dec last year → today
+      start = new Date(y - 1, 11, 25);
       setRange(start, end);
     }
   };

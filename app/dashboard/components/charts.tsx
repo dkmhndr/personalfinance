@@ -107,6 +107,7 @@ export function ExpenseDonut({
 }
 
 export function CashflowTrend({ data, hide = false }: { data: { period: string; income: number; expense: number }[]; hide?: boolean }) {
+  const tickInterval = data.length > 12 ? Math.ceil(data.length / 12) - 1 : 0;
   return (
     <Card>
       <CardHeader>
@@ -115,7 +116,7 @@ export function CashflowTrend({ data, hide = false }: { data: { period: string; 
       <CardContent className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <XAxis dataKey="period" />
+            <XAxis dataKey="period" interval={tickInterval} angle={data.length > 12 ? -45 : 0} textAnchor={data.length > 12 ? 'end' : 'middle'} height={data.length > 12 ? 50 : 30} />
             <YAxis tickFormatter={(v) => (hide ? '' : formatAbbrev(v))} />
             <Tooltip
               formatter={(v: any) => (hide ? maskDots(v) : currencyFormatter(v))}
@@ -151,8 +152,9 @@ export function DailySpendingBar({
     capped: Math.min(d.total, cap),
     original: d.total,
   }));
-  const domainMax = cap; // hard cap per bucket
+  const domainMax = cap;
   const labelFormatter = bucket === 'month' ? (d: string) => d : (d: string) => (d ? d.slice(8, 10) : '');
+  const tickInterval = data.length > 24 ? Math.ceil(data.length / 12) - 1 : 0;
 
   return (
     <Card>
@@ -164,7 +166,7 @@ export function DailySpendingBar({
           <BarChart data={cappedData}>
             <XAxis
               dataKey="date"
-              interval={0}
+              interval={tickInterval}
               angle={-45}
               textAnchor="end"
               height={60}
