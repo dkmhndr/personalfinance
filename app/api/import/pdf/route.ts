@@ -28,11 +28,23 @@ export const dynamic = 'force-dynamic';
 let pdfParseFn: any | null = null;
 async function getPdfParse() {
   if (!pdfParseFn) {
-    const mod = await import('pdf-parse');
-    const fn = (mod as any).default ?? mod;
-    if (typeof fn !== 'function') {
-      throw new Error('pdf-parse did not export a function');
+    const req = eval('require') as NodeRequire;
+    let mod: any;
+    let fn: any = null;
+    try {
+      mod = req('pdf-parse');
+      fn = typeof mod === 'function' ? mod : (typeof mod?.default === 'function' ? mod.default : null);
+    } catch (e) {
+      // fallback tried below
     }
+    if (!fn) {
+      try {
+        fn = req('pdf-parse/lib/pdf-parse');
+      } catch (e) {
+        // continue to throw
+      }
+    }
+    if (!fn) throw new Error('pdf-parse function not found; ensure dependency is installed');
     pdfParseFn = fn;
   }
   return pdfParseFn as (buf: Buffer) => Promise<{ text: string }>;
