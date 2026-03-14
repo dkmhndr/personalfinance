@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Category } from '@/types';
-import { TransactionsTable } from '../dashboard/components/transactions-table';
+import { TransactionsTable } from '../../dashboard/components/transactions-table';
 
 type Props = {
   categories: Category[];
