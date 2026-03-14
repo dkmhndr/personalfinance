@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import DomMatrixImport from '@thednp/dommatrix';
 import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 
-// Polyfill DOMMatrix for pdf.js used inside pdf-parse.
-const DomMatrixAny =
-  (DomMatrixImport as any).DOMMatrix ||
-  (DomMatrixImport as any).DOMMatrixReadOnly ||
-  (DomMatrixImport as any);
-if (typeof (globalThis as any).DOMMatrix === 'undefined') {
-  (globalThis as any).DOMMatrix = DomMatrixAny;
-  (globalThis as any).DOMMatrixReadOnly = DomMatrixAny;
-}
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 type ParsedRow = {
   id: number;
@@ -21,19 +13,6 @@ type ParsedRow = {
   amount: number;
   balance: number | null;
 };
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
-async function parsePdf(buffer: Buffer) {
-  const mod = await import('pdf-parse');
-  const PDFParse = (mod as any).PDFParse || (mod as any).default?.PDFParse;
-  if (!PDFParse) throw new Error('PDFParse class missing from pdf-parse');
-  const parser = new PDFParse({ data: buffer });
-  const result = await parser.getText();
-  await parser.destroy?.();
-  return result;
-}
 
 function toParsedRow(row: StatementRow, idx: number): ParsedRow {
   const now = Date.now();
@@ -78,11 +57,45 @@ async function readPdfBuffer(req: NextRequest): Promise<Buffer> {
   return Buffer.from(arrayBuffer);
 }
 
+async function extractText(buffer: Buffer): Promise<string> {
+  // Lazy require to keep Next bundler happy
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const dommatrix = require('@thednp/dommatrix');
+  const domCtor =
+    dommatrix.DOMMatrix ||
+    dommatrix.DOMMatrixReadOnly ||
+    dommatrix.default ||
+    dommatrix;
+  if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+    (globalThis as any).DOMMatrix = domCtor;
+  }
+  if (typeof (globalThis as any).DOMMatrixReadOnly === 'undefined') {
+    (globalThis as any).DOMMatrixReadOnly = domCtor;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pdfParseMod = require('pdf-parse');
+  const PDFParse =
+    pdfParseMod.PDFParse ||
+    pdfParseMod.default?.PDFParse ||
+    pdfParseMod.default ||
+    pdfParseMod;
+
+  if (typeof PDFParse !== 'function') {
+    throw new Error('pdf-parse export not found');
+  }
+
+  const parser = new PDFParse({ data: buffer, disableWorker: true });
+  const result = await parser.getText();
+  await parser.destroy?.();
+  return result.text || '';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const buffer = await readPdfBuffer(req);
-    const parsed = await parsePdf(buffer);
-    const rows = parseStatementText(parsed.text || '');
+    const text = await extractText(buffer);
+    const rows = parseStatementText(text || '');
 
     if (!rows.length) {
       return NextResponse.json({ message: 'No transactions found in PDF' }, { status: 400 });
