@@ -84,20 +84,40 @@ export default function ImportClient() {
     setStatus('parsing');
     setMessage('Parsing PDF…');
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch('/api/import/pdf', {
-        method: 'POST',
-        body: form,
+      const { parseStatementText } = await import('@/lib/statement-parser');
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
+      // use CDN worker to avoid bundling issues in Next
+      pdfjs.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjs.getDocument({
+        data: arrayBuffer,
+        disableWorker: false,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setStatus('error');
-        setMessage(err.message || 'PDF parse failed');
-        return;
+      const doc = await loadingTask.promise;
+      let text = '';
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const strings = content.items
+          .map((item: any) => (typeof item.str === 'string' ? item.str : item?.unicode || ''))
+          .filter(Boolean)
+          .join(' ');
+        text += strings + '\n';
       }
-      const data = await res.json();
-      const parsedRows = (data.rows || []) as ParsedRow[];
+      await doc.destroy();
+
+      const parsedRows = (parseStatementText(text || '') || []).map((r: any, idx: number) => ({
+        id: r.id ?? Date.now() + idx,
+        transaction_at: r.tanggalWaktu,
+        from_or_to: r.sumberTujuan,
+        remark: r.rincianTransaksi,
+        type: r.jumlah != null && r.jumlah < 0 ? 'db' : 'cr',
+        amount: r.jumlah ?? 0,
+        balance: r.saldo ?? null,
+      })) as ParsedRow[];
+
       setRows(parsedRows);
       setStatus('idle');
       setMessage(`Parsed ${parsedRows.length} rows. Review & edit before import.`);
