@@ -81,7 +81,7 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
       page: String(nextPage),
       pageSize: "20",
     });
-    const res = await fetch(`/api/dashboard?${qs.toString()}`);
+    const res = await fetch(`/api/dashboard?${qs.toString()}`, { cache: "no-store" });
     if (!res.ok) {
       console.error("dashboard fetch failed", res.status);
       setLoading(false);
