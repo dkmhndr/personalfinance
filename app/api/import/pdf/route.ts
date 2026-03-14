@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pdfParse from 'pdf-parse';
-import { DOMMatrix as DomMatrixCtor } from '@thednp/dommatrix';
+import DomMatrixCtor from '@thednp/dommatrix';
 import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 
 // pdfjs (used by pdf-parse) expects DOMMatrix in the global scope in Node.
