@@ -16,6 +16,9 @@ Single-user personal finance dashboard. Pull raw bank statements from Supabase `
 NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 OPENAI_API_KEY=<optional>
+AUTH_PASSWORD=<choose-a-strong-password>
+# optional: different signing secret, defaults to AUTH_PASSWORD
+# AUTH_SECRET=<another-secret>
 ```
 3) Apply SQL: run `psql` or Supabase SQL editor with `supabase/migrations/0001_init.sql` then `supabase/seeds/seed.sql`.
 4) Run dev server: `npm run dev` and open http://localhost:3000
@@ -27,6 +30,7 @@ OPENAI_API_KEY=<optional>
 - **Review**: `/review` lists AI/uncategorized items for manual override.
 - **Dashboard**: KPIs, expense donut, cashflow trend (month/year toggle), daily spending, top categories, drill-down table with filters and manual category override.
 - **Filters**: date range, category, source (rule/AI/manual/none), quick ranges (this month, last month, last 3 months, this year).
+- **Auth**: optional single-user login at `/login` backed by `AUTH_PASSWORD`; middleware blocks pages and API routes until authenticated.
 
 ## Tables (Supabase)
 - `bank_jago_statements`: raw import.

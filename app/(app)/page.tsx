@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { DashboardClient } from './dashboard/components/dashboard-client';
+import { DashboardClient } from '@/app/dashboard/components/dashboard-client';
 
 export const revalidate = 0;
 
