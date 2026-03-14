@@ -98,3 +98,36 @@ export interface SummaryKPI {
   incomeCount?: number;
   expenseCount?: number;
 }
+
+export type BudgetRecurrence = 'none' | 'monthly';
+
+export interface BudgetLine {
+  id: string;
+  period: string; // YYYY-MM
+  scenario: string;
+  type: TransactionType | 'transfer';
+  category_id: string | null;
+  label: string;
+  amount: number;
+  recurrence: BudgetRecurrence;
+  created_at?: string;
+  category?: Category | null;
+}
+
+export interface BudgetSnapshot {
+  lines: BudgetLine[];
+  totals: {
+    plannedIncome: number;
+    plannedExpense: number;
+    netPlanned: number;
+  };
+  actual: {
+    income: number;
+    expense: number;
+    net: number;
+    lastMonthIncome: number;
+    lastMonthExpense: number;
+    last3AvgIncome: number;
+    last3AvgExpense: number;
+  };
+}

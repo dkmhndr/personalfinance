@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
 import { supabaseAdmin } from '@/lib/supabase';
-import { periodString } from '../route';
+import { periodString } from '../utils';
 
 export const dynamic = 'force-dynamic';
 

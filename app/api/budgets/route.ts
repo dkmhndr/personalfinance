@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { periodString } from './utils';
 import { type BudgetSnapshot } from '@/types';
 
 export const dynamic = 'force-dynamic';
-
-export function periodString(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
-}
 
 function monthBounds(period: string) {
   const [y, m] = period.split('-').map(Number);
