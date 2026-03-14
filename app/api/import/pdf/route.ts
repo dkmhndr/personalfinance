@@ -5,8 +5,13 @@ import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 if (typeof (global as any).DOMMatrix === 'undefined') {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const DomMatrixCtor = require('dommatrix'); // library exports the constructor as default
-    (global as any).DOMMatrix = DomMatrixCtor?.DOMMatrix || DomMatrixCtor;
+    const lib = require('@thednp/dommatrix');
+    const DomMatrixCtor = (lib && lib.DOMMatrix) || lib;
+    (global as any).DOMMatrix = DomMatrixCtor;
+    // Some libs reference DOMMatrixReadOnly; map to the same ctor if missing.
+    if (typeof (global as any).DOMMatrixReadOnly === 'undefined') {
+      (global as any).DOMMatrixReadOnly = DomMatrixCtor;
+    }
   } catch (e) {
     console.warn('DOMMatrix polyfill missing; install `dommatrix` to parse PDFs.');
   }
