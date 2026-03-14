@@ -30,13 +30,19 @@ type ParsedRow = {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-let pdfPromise: Promise<any> | null = null;
-async function getPdfParser() {
-  if (!pdfPromise) {
-    pdfPromise = import('pdf-parse');
+let pdfModulePromise: Promise<any> | null = null;
+async function getPdfParserCtor() {
+  if (!pdfModulePromise) {
+    // Use eval to avoid bundling pdf-parse (keeps its internal files on disk).
+    const r = eval('require') as NodeRequire;
+    pdfModulePromise = Promise.resolve(r('pdf-parse'));
   }
-  const mod = await pdfPromise;
-  return (mod as any).default ?? mod;
+  const mod = await pdfModulePromise;
+  const ctor = (mod as any).PDFParse ?? (mod as any).default?.PDFParse;
+  if (!ctor) {
+    throw new Error('PDFParse class not found; ensure pdf-parse v2 is installed');
+  }
+  return ctor;
 }
 
 function toParsedRow(row: StatementRow, idx: number): ParsedRow {
@@ -84,10 +90,18 @@ async function readPdfBuffer(req: NextRequest): Promise<Buffer> {
 
 export async function POST(req: NextRequest) {
   try {
-    const pdf = await getPdfParser();
+    const started = Date.now();
+    const PdfParse = await getPdfParserCtor();
     const buffer = await readPdfBuffer(req);
-    const parsed = await pdf(buffer);
+    console.log('[import/pdf] buffer bytes:', buffer.length);
+
+    const parser = new PdfParse({ data: buffer });
+    const parsed = await parser.getText();
+    await parser.destroy?.();
+    console.log('[import/pdf] parsed text length:', parsed.text?.length ?? 0);
+
     const rows = parseStatementText(parsed.text || '');
+    console.log('[import/pdf] parsed rows:', rows.length, 'elapsed ms:', Date.now() - started);
 
     if (!rows.length) {
       return NextResponse.json({ message: 'No transactions found in PDF' }, { status: 400 });
@@ -97,6 +111,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, rows: normalized, count: normalized.length });
   } catch (err: any) {
+    console.error('[import/pdf] error', err);
     return NextResponse.json(
       { message: err?.message || 'Failed to parse PDF' },
       { status: 500 },

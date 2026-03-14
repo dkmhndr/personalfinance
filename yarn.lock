@@ -721,6 +721,11 @@
   resolved "https://registry.yarnpkg.com/@tanstack/table-core/-/table-core-8.21.3.tgz#2977727d8fc8dfa079112d9f4d4c019110f1732c"
   integrity sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg==
 
+"@thednp/dommatrix@^3.0.2":
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/@thednp/dommatrix/-/dommatrix-3.0.2.tgz#30008dd43efd2e33518619e637f7cf7676a989c9"
+  integrity sha512-OO4TkIFA1SGuJoiVLgxwEZhGuDBeUxiYYLxnLwBjrL1ktnPHLPtqpjbFDAM0HkruI4/vGvhX7DLxxKDuraEz4A==
+
 "@tybys/wasm-util@^0.10.0":
   version "0.10.1"
   resolved "https://registry.yarnpkg.com/@tybys/wasm-util/-/wasm-util-0.10.1.tgz#ecddd3205cf1e2d5274649ff0eedd2991ed7f414"
