@@ -19,6 +19,7 @@ export default function AppShellLayout({ children }: { children: ReactNode }) {
         <nav className="flex flex-wrap gap-2 text-sm">
           {[
             { href: '/', label: 'Dashboard' },
+            { href: '/budget', label: 'Budget' },
             { href: '/review', label: 'Review' },
             { href: '/rules', label: 'Rules' },
             { href: '/categories', label: 'Categories' },
