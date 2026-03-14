@@ -30,6 +30,24 @@ type DashboardResponse = {
   totalTransactions: number;
 };
 
+type SummaryResponse = {
+  summary: SummaryKPI;
+  allTimeStartDate: string | null;
+  allTimeEndDate: string | null;
+};
+
+type ChartsResponse = {
+  expenseByCategory: { name: string; total: number }[];
+  cashflow: { period: string; income: number; expense: number }[];
+  daily: { date: string; total: number }[];
+  topCategories: { name: string; total: number }[];
+};
+
+type TransactionsResponse = {
+  transactions: Transaction[];
+  totalTransactions: number;
+};
+
 const defaultFilters: DashboardFilters = {
   viewBy: "month",
   startDate: new Date(new Date().getFullYear(), 0, 1).toISOString(),
@@ -50,9 +68,17 @@ const defaultFilters: DashboardFilters = {
 export function DashboardClient({ categories }: { categories: Category[] }) {
   const [filters, setFilters] = useState<DashboardFilters>(defaultFilters);
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<DashboardResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<SummaryKPI | null>(null);
+  const [charts, setCharts] = useState<ChartsResponse | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [loadingOverview, setLoadingOverview] = useState(false);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(false);
+  const [allTimeRange, setAllTimeRange] = useState<{
+    startDate?: string;
+    endDate?: string;
+  }>({});
 
   const withBucket = (base: DashboardFilters): DashboardFilters => {
     if (base.startDate && base.endDate) {
@@ -66,41 +92,82 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
     return { ...base, bucket: "month" };
   };
 
-  const fetchData = async (
-    nextFilters: DashboardFilters = filters,
-    nextPage = page,
+  const buildQuery = (
+    nextFilters: DashboardFilters,
+    extra: Record<string, string> = {},
   ) => {
     const effectiveFilters = withBucket(nextFilters);
-    setLoading(true);
-    const qs = new URLSearchParams({
+    return new URLSearchParams({
       ...Object.fromEntries(
         Object.entries(effectiveFilters).filter(
           ([, v]) => v !== undefined && v !== null,
         ) as any,
       ),
+      ...extra,
+    });
+  };
+
+  const fetchOverview = async (nextFilters: DashboardFilters = filters) => {
+    const qs = buildQuery(nextFilters);
+    setLoadingOverview(true);
+    try {
+      const [summaryRes, chartsRes] = await Promise.all([
+        fetch(`/api/dashboard/summary?${qs.toString()}`, { cache: "no-store" }),
+        fetch(`/api/dashboard/charts?${qs.toString()}`, { cache: "no-store" }),
+      ]);
+      if (!summaryRes.ok || !chartsRes.ok) {
+        console.error("dashboard overview fetch failed", summaryRes.status, chartsRes.status);
+        return;
+      }
+      const summaryJson = (await summaryRes.json()) as SummaryResponse;
+      const chartsJson = (await chartsRes.json()) as ChartsResponse;
+      setSummary(summaryJson.summary);
+      setAllTimeRange({
+        startDate: summaryJson.allTimeStartDate || undefined,
+        endDate: summaryJson.allTimeEndDate || undefined,
+      });
+      setCharts(chartsJson);
+    } finally {
+      setLoadingOverview(false);
+    }
+  };
+
+  const fetchTransactionsPage = async (
+    nextFilters: DashboardFilters = filters,
+    nextPage = page,
+  ) => {
+    const qs = buildQuery(nextFilters, {
       page: String(nextPage),
       pageSize: "20",
     });
-    const res = await fetch(`/api/dashboard?${qs.toString()}`, { cache: "no-store" });
-    if (!res.ok) {
-      console.error("dashboard fetch failed", res.status);
-      setLoading(false);
-      return;
+    setLoadingTransactions(true);
+    try {
+      const res = await fetch(`/api/dashboard/transactions?${qs.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        console.error("dashboard transactions fetch failed", res.status);
+        return;
+      }
+      const json = (await res.json()) as TransactionsResponse;
+      setTransactions(json.transactions || []);
+      setTotalTransactions(json.totalTransactions || 0);
+    } finally {
+      setLoadingTransactions(false);
     }
-    const json = (await res.json()) as DashboardResponse;
-    setData(json);
-    setLoading(false);
   };
 
   useEffect(() => {
-    fetchData(withBucket(filters));
+    fetchOverview(withBucket(filters));
+    fetchTransactionsPage(withBucket(filters), 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFiltersChange = (next: DashboardFilters) => {
     setFilters(next);
     setPage(1);
-    fetchData(next, 1);
+    fetchOverview(next);
+    fetchTransactionsPage(next, 1);
   };
 
   const handleSelectCategory = (name: string) => {
@@ -137,38 +204,34 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
 
   const handleManualChange = async (id: string, categoryId: string) => {
     // optimistic UI
-    setData((prev) =>
+    setTransactions((prev) =>
       prev
-        ? {
-            ...prev,
-            transactions: prev.transactions
-              .map((t) =>
-                t.id === id
-                  ? {
-                      ...t,
-                      category_id: categoryId,
-                      categorization_source: "manual" as const,
-                    }
-                  : t,
-              )
-              // hide manual overrides if current filter is AI/none
-              .filter((t) =>
-                filters.source
-                  ? t.categorization_source === filters.source
-                  : true,
-              ),
-          }
-        : prev,
+        .map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                category_id: categoryId,
+                categorization_source: "manual" as const,
+              }
+            : t,
+        )
+        // hide manual overrides if current filter is AI/none
+        .filter((t) =>
+          filters.source
+            ? t.categorization_source === filters.source
+            : true,
+        ),
     );
     await fetch("/api/transactions/category", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transactionId: id, categoryId }),
     });
-    fetchData();
+    fetchOverview(filters);
+    fetchTransactionsPage(filters, page);
   };
 
-  const totalPages = data ? Math.ceil(data.totalTransactions / 20) : 1;
+  const totalPages = Math.max(1, Math.ceil(totalTransactions / 20));
 
   const skeletonCard = (
     <div className="glass h-28 animate-pulse rounded-xl bg-white/5" />
@@ -196,9 +259,10 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
         categories={categories}
         onChange={(f) => handleFiltersChange(withBucket(f))}
         initial={filters}
+        allTimeRange={allTimeRange}
       />
 
-      {loading && !data ? (
+      {loadingOverview && !summary ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
@@ -208,41 +272,41 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
           ))}
         </div>
       ) : (
-        <SummaryCards data={data?.summary || null} hide={hideAmounts} />
+        <SummaryCards data={summary || null} hide={hideAmounts} />
       )}
 
       <div className="grid gap-3 lg:grid-cols-5">
         <div className="lg:col-span-2">
-          {loading && !data ? (
+          {loadingOverview && !charts ? (
             skeletonCard
           ) : (
             <ExpenseDonut
-              data={data?.expenseByCategory || []}
+              data={charts?.expenseByCategory || []}
               onSelectCategory={handleSelectCategory}
               hide={hideAmounts}
             />
           )}
         </div>
         <div className="lg:col-span-3">
-          {loading && !data ? (
+          {loadingOverview && !charts ? (
             skeletonCard
           ) : (
-            <CashflowTrend data={data?.cashflow || []} hide={hideAmounts} />
+            <CashflowTrend data={charts?.cashflow || []} hide={hideAmounts} />
           )}
         </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-1">
-        {loading && !data ? (
+        {loadingOverview && !charts ? (
           skeletonCard
         ) : (
           <DailySpendingBar
-            data={data?.daily || []}
+            data={charts?.daily || []}
             onSelectDate={handleSelectDate}
             bucket={
-              data?.daily &&
-              data.daily.length > 0 &&
-              data.daily[0].date.length === 7
+              charts?.daily &&
+              charts.daily.length > 0 &&
+              charts.daily[0].date.length === 7
                 ? "month"
                 : "day"
             }
@@ -254,9 +318,9 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
       <Card>
         <CardTitle className="mb-2">Transactions</CardTitle>
         <CardContent className="space-y-3">
-          {loading && <div className="text-sm text-muted">Loading…</div>}
+          {loadingTransactions && <div className="text-sm text-muted">Loading…</div>}
           <TransactionsTable
-            data={data?.transactions || []}
+            data={transactions}
             categories={categories}
             onManualChange={handleManualChange}
             hide={hideAmounts}
@@ -272,7 +336,7 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
                 onClick={() => {
                   const next = page - 1;
                   setPage(next);
-                  fetchData(filters, next);
+                  fetchTransactionsPage(filters, next);
                 }}
               >
                 Prev
@@ -283,7 +347,7 @@ export function DashboardClient({ categories }: { categories: Category[] }) {
                 onClick={() => {
                   const next = page + 1;
                   setPage(next);
-                  fetchData(filters, next);
+                  fetchTransactionsPage(filters, next);
                 }}
               >
                 Next

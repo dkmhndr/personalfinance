@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  fetchSummary,
   fetchExpenseByCategory,
   fetchCashflowTrend,
-  fetchTransactions,
   fetchDailySpending,
   fetchTopSpendingCategories,
 } from '@/lib/queries';
@@ -30,36 +28,48 @@ function parseFilters(req: NextRequest): DashboardFilters {
   };
 }
 
+function diffDays(startIso: string, endIso: string) {
+  return Math.abs(new Date(endIso).getTime() - new Date(startIso).getTime()) / (1000 * 60 * 60 * 24);
+}
+
+function shiftMonths(iso: string, months: number) {
+  const d = new Date(iso);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString();
+}
+
 export async function GET(req: NextRequest) {
   const filters = parseFilters(req);
-  const page = Number(req.nextUrl.searchParams.get('page') || '1');
-  const pageSize = Number(req.nextUrl.searchParams.get('pageSize') || '20');
 
   const now = new Date();
-  // Find min/max to support all-time when no date filter
   const [minRes, maxRes] = await Promise.all([
-    supabaseAdmin.from('transactions').select('transaction_at').order('transaction_at', { ascending: true }).limit(1).maybeSingle(),
-    supabaseAdmin.from('transactions').select('transaction_at').order('transaction_at', { ascending: false }).limit(1).maybeSingle(),
+    supabaseAdmin
+      .from('transactions')
+      .select('transaction_at')
+      .order('transaction_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('transactions')
+      .select('transaction_at')
+      .order('transaction_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+
   const minDate = minRes.data?.transaction_at || new Date(now.getFullYear(), 0, 1).toISOString();
   const maxDate = maxRes.data?.transaction_at || now.toISOString();
 
   const rangeStart = filters.startDate || minDate;
   const rangeEnd = filters.endDate || maxDate;
   const hasExplicitRange = Boolean(filters.startDate && filters.endDate);
-  const rangeDays =
-    Math.abs(new Date(rangeEnd).getTime() - new Date(rangeStart).getTime()) / (1000 * 60 * 60 * 24);
+  const rangeDays = diffDays(rangeStart, rangeEnd);
 
   // Cashflow: if explicit range < 3 months, extend to 3 months; all-time remains all-time.
-  const cashStart = hasExplicitRange && rangeDays < 92
-    ? (() => {
-        const d = new Date(rangeEnd);
-        d.setMonth(d.getMonth() - 3);
-        return d.toISOString();
-      })()
-    : rangeStart;
+  const cashStart = hasExplicitRange && rangeDays < 92 ? shiftMonths(rangeEnd, -3) : rangeStart;
   const cashFilters: DashboardFilters = {
     ...filters,
+    type: undefined,
     startDate: cashStart,
     endDate: rangeEnd,
     bucket: 'month',
@@ -69,32 +79,28 @@ export async function GET(req: NextRequest) {
   const spendBucket: 'day' | 'month' = rangeDays > 92 ? 'month' : 'day';
   const spendFilters: DashboardFilters = {
     ...filters,
+    type: undefined,
     startDate: rangeStart,
     endDate: rangeEnd,
     bucket: spendBucket,
   };
 
   try {
-    const [summary, expenseByCategory, cashflow, transactions, daily, topCategories] = await Promise.all([
-      fetchSummary(filters),
+    const [expenseByCategory, cashflow, daily, topCategories] = await Promise.all([
       fetchExpenseByCategory(spendFilters),
       fetchCashflowTrend(cashFilters),
-      fetchTransactions(filters, page, pageSize),
       fetchDailySpending(spendFilters),
       fetchTopSpendingCategories(spendFilters),
     ]);
 
     return NextResponse.json({
-      summary,
       expenseByCategory,
       cashflow,
       daily,
       topCategories,
-      transactions: transactions.data,
-      totalTransactions: transactions.count,
     });
   } catch (error: any) {
-    console.error('dashboard api error', error);
+    console.error('dashboard charts api error', error);
     return NextResponse.json({ message: error.message }, { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -12,10 +12,15 @@ type Props = {
   categories: { id: string; name: string }[];
   onChange: (filters: DashboardFilters) => void;
   initial: DashboardFilters;
+  allTimeRange?: { startDate?: string; endDate?: string };
 };
 
-export function FilterBar({ categories, onChange, initial }: Props) {
+export function FilterBar({ categories, onChange, initial, allTimeRange }: Props) {
   const [local, setLocal] = useState<DashboardFilters>(initial);
+
+  useEffect(() => {
+    setLocal(initial);
+  }, [initial]);
 
   const quick = (range: 'thisMonth' | 'lastMonth' | 'last3' | 'thisYear' | 'allTime') => {
     const today = new Date();
@@ -50,7 +55,10 @@ export function FilterBar({ categories, onChange, initial }: Props) {
       end = new Date(y, m, 24, 23, 59, 59, 999);
       setRange(start, end);
     } else if (range === 'allTime') {
-      setRange(undefined, undefined);
+      setRange(
+        allTimeRange?.startDate ? new Date(allTimeRange.startDate) : undefined,
+        allTimeRange?.endDate ? new Date(allTimeRange.endDate) : undefined,
+      );
     } else {
       // thisYear: 25 Dec last year → today
       start = new Date(y - 1, 11, 25);
@@ -88,14 +96,14 @@ export function FilterBar({ categories, onChange, initial }: Props) {
           value={local.startDate ? local.startDate.slice(0, 10) : ''}
           onChange={(e) => handle('startDate', e.target.value ? new Date(e.target.value).toISOString() : undefined)}
           placeholder="Start"
-          className="max-w-full md:max-w-[180px]"
+          className="max-w-full md:max-w-[200px]"
         />
         <Input
           type="date"
           value={local.endDate ? local.endDate.slice(0, 10) : ''}
           onChange={(e) => handle('endDate', e.target.value ? new Date(e.target.value).toISOString() : undefined)}
           placeholder="End"
-          className="max-w-full md:max-w-[180px]"
+          className="max-w-full md:max-w-[200px]"
         />
         <Select value={local.categoryId || ''} onChange={(e) => handle('categoryId', e.target.value || undefined)}>
           <option value="">All categories</option>

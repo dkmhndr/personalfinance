@@ -123,6 +123,7 @@ export async function fetchSummary(filters: DashboardFilters) {
 }
 
 export async function fetchExpenseByCategory(filters: DashboardFilters) {
+  const expenseFilters: DashboardFilters = { ...filters, type: undefined };
   const data = await fetchAll<{ amount: number; categories: { name: string; type: string } | null }>((from, to) =>
     applyFilters(
       supabaseAdmin
@@ -130,7 +131,7 @@ export async function fetchExpenseByCategory(filters: DashboardFilters) {
         .select('amount,categories(name,type)')
         .eq('type', 'expense')
         .range(from, to),
-      filters,
+      expenseFilters,
     ),
   );
   const map: Record<string, number> = {};
@@ -189,6 +190,7 @@ export async function fetchTransactions(filters: DashboardFilters, page = 1, pag
 
 export async function fetchDailySpending(filters: DashboardFilters) {
   const bucket = filters.bucket || 'day';
+  const expenseFilters: DashboardFilters = { ...filters, type: undefined };
   const data = await fetchAll<{ amount: number; transaction_at: string; categories: { name: string; type: string } | null }>(
     (from, to) =>
       applyFilters(
@@ -197,7 +199,7 @@ export async function fetchDailySpending(filters: DashboardFilters) {
           .select('amount,transaction_at,categories(name,type)')
           .eq('type', 'expense')
           .range(from, to),
-        filters,
+        expenseFilters,
       ),
   );
   const map: Record<string, number> = {};
