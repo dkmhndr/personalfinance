@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pdfParse from 'pdf-parse';
-import DomMatrixCtor from '@thednp/dommatrix';
+import DomMatrixImport from '@thednp/dommatrix';
 import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 
-// pdfjs (used by pdf-parse) expects DOMMatrix in the global scope in Node.
+// Ensure DOMMatrix is available before pdf-parse loads.
+const DomMatrixAny =
+  (DomMatrixImport as any).DOMMatrix ||
+  (DomMatrixImport as any).DOMMatrixReadOnly ||
+  (DomMatrixImport as any);
 if (typeof (global as any).DOMMatrix === 'undefined') {
-  (global as any).DOMMatrix = DomMatrixCtor;
-  (global as any).DOMMatrixReadOnly = DomMatrixCtor;
+  (global as any).DOMMatrix = DomMatrixAny;
+  (global as any).DOMMatrixReadOnly = DomMatrixAny;
 }
 
 type ParsedRow = {
@@ -21,6 +24,15 @@ type ParsedRow = {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+let pdfParseFn: any | null = null;
+async function getPdfParse() {
+  if (!pdfParseFn) {
+    const mod = await import('pdf-parse');
+    pdfParseFn = (mod as any).default ?? mod;
+  }
+  return pdfParseFn as (buf: Buffer) => Promise<{ text: string }>;
+}
 
 function toParsedRow(row: StatementRow, idx: number): ParsedRow {
   const now = Date.now();
@@ -68,6 +80,7 @@ async function readPdfBuffer(req: NextRequest): Promise<Buffer> {
 export async function POST(req: NextRequest) {
   try {
     const buffer = await readPdfBuffer(req);
+    const pdfParse = await getPdfParse();
     const parsed = await pdfParse(buffer);
     const rows = parseStatementText(parsed.text || '');
 
