@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import DomMatrixImport from '@thednp/dommatrix';
 import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 
-// Ensure DOMMatrix is available before pdf-parse loads.
+// Polyfill DOMMatrix for pdf.js used inside pdf-parse.
 const DomMatrixAny =
   (DomMatrixImport as any).DOMMatrix ||
   (DomMatrixImport as any).DOMMatrixReadOnly ||
@@ -25,29 +25,14 @@ type ParsedRow = {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-let pdfParseFn: any | null = null;
-async function getPdfParse() {
-  if (!pdfParseFn) {
-    const req = eval('require') as NodeRequire;
-    let mod: any;
-    let fn: any = null;
-    try {
-      mod = req('pdf-parse');
-      fn = typeof mod === 'function' ? mod : (typeof mod?.default === 'function' ? mod.default : null);
-    } catch (e) {
-      // fallback tried below
-    }
-    if (!fn) {
-      try {
-        fn = req('pdf-parse/lib/pdf-parse');
-      } catch (e) {
-        // continue to throw
-      }
-    }
-    if (!fn) throw new Error('pdf-parse function not found; ensure dependency is installed');
-    pdfParseFn = fn;
-  }
-  return pdfParseFn as (buf: Buffer) => Promise<{ text: string }>;
+async function parsePdf(buffer: Buffer) {
+  const mod = await import('pdf-parse');
+  const PDFParse = (mod as any).PDFParse || (mod as any).default?.PDFParse;
+  if (!PDFParse) throw new Error('PDFParse class missing from pdf-parse');
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  await parser.destroy?.();
+  return result;
 }
 
 function toParsedRow(row: StatementRow, idx: number): ParsedRow {
@@ -96,8 +81,7 @@ async function readPdfBuffer(req: NextRequest): Promise<Buffer> {
 export async function POST(req: NextRequest) {
   try {
     const buffer = await readPdfBuffer(req);
-    const pdfParse = await getPdfParse();
-    const parsed = await pdfParse(buffer);
+    const parsed = await parsePdf(buffer);
     const rows = parseStatementText(parsed.text || '');
 
     if (!rows.length) {
