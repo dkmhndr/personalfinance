@@ -7,9 +7,9 @@ const DomMatrixAny =
   (DomMatrixImport as any).DOMMatrix ||
   (DomMatrixImport as any).DOMMatrixReadOnly ||
   (DomMatrixImport as any);
-if (typeof (global as any).DOMMatrix === 'undefined') {
-  (global as any).DOMMatrix = DomMatrixAny;
-  (global as any).DOMMatrixReadOnly = DomMatrixAny;
+if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+  (globalThis as any).DOMMatrix = DomMatrixAny;
+  (globalThis as any).DOMMatrixReadOnly = DomMatrixAny;
 }
 
 type ParsedRow = {
@@ -29,7 +29,11 @@ let pdfParseFn: any | null = null;
 async function getPdfParse() {
   if (!pdfParseFn) {
     const mod = await import('pdf-parse');
-    pdfParseFn = (mod as any).default ?? mod;
+    const fn = (mod as any).default ?? mod;
+    if (typeof fn !== 'function') {
+      throw new Error('pdf-parse did not export a function');
+    }
+    pdfParseFn = fn;
   }
   return pdfParseFn as (buf: Buffer) => Promise<{ text: string }>;
 }
