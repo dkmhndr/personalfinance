@@ -139,7 +139,7 @@ export default function ImportClient() {
     }
   };
 
-  const upload = async () => {
+  const upload = async (withSync: boolean) => {
     if (rows.length === 0) return;
     setStatus('uploading');
     setMessage(null);
@@ -160,7 +160,7 @@ export default function ImportClient() {
     const res = await fetch('/api/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: sanitized }),
+      body: JSON.stringify({ rows: sanitized, sync: withSync }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -170,7 +170,54 @@ export default function ImportClient() {
     }
     const data = await res.json();
     setStatus('done');
-    setMessage(`Imported ${data.insertedRaw} rows. Sync: inserted ${data.sync?.inserted ?? 0}, skipped ${data.sync?.skipped ?? 0}`);
+    if (data.synced && data.sync) {
+      setMessage(`Imported ${data.insertedRaw} rows. Sync: inserted ${data.sync?.inserted ?? 0}, skipped ${data.sync?.skipped ?? 0}`);
+      return;
+    }
+
+    setMessage(`Imported ${data.insertedRaw} rows without sync.`);
+  };
+
+  const exportCsv = () => {
+    if (rows.length === 0) return;
+
+    const csvRows = rows.map((row, idx) => ({
+      id: row.id ?? Date.now() + idx,
+      transaction_at: row.transaction_at || new Date().toISOString(),
+      from_or_to: row.from_or_to || '',
+      remark: row.remark || '',
+      type: normalizeType(row.type),
+      amount: Number.isFinite(row.amount as number) ? Number(row.amount) : 0,
+      balance:
+        row.balance === null || row.balance === undefined
+          ? ''
+          : Number.isFinite(row.balance as number)
+            ? Number(row.balance)
+            : '',
+    }));
+
+    const header = ['id', 'transaction_at', 'from_or_to', 'remark', 'type', 'amount', 'balance'];
+    const escapeCell = (value: unknown) => {
+      const asString = value === null || value === undefined ? '' : String(value);
+      return `"${asString.replace(/"/g, '""')}"`;
+    };
+    const csv = [
+      header.map(escapeCell).join(','),
+      ...csvRows.map((row) =>
+        header
+          .map((key) => escapeCell((row as Record<string, unknown>)[key]))
+          .join(','),
+      ),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `statements-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -184,9 +231,20 @@ export default function ImportClient() {
         {rows.length > 0 && (
           <>
             <div className="text-sm text-muted">
-              Preview & edit ({rows.length} rows). Click “Import & Sync” to save your edits.
+              Preview & edit ({rows.length} rows). Choose “Import only” or “Import & Sync”.
             </div>
-            <div className="overflow-auto border rounded">
+            <div className="max-h-[65vh] overflow-auto border rounded">
+              <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background p-2">
+                <Button onClick={() => upload(true)} disabled={status === 'uploading' || rows.length === 0}>
+                  {status === 'uploading' ? 'Uploading & Syncing…' : 'Import & Sync'}
+                </Button>
+                <Button variant="outline" onClick={() => upload(false)} disabled={status === 'uploading' || rows.length === 0}>
+                  {status === 'uploading' ? 'Uploading…' : 'Import only'}
+                </Button>
+                <Button variant="outline" onClick={exportCsv} disabled={rows.length === 0}>
+                  Export to CSV
+                </Button>
+              </div>
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 text-left">
@@ -268,9 +326,6 @@ export default function ImportClient() {
             </div>
           </>
         )}
-        <Button onClick={upload} disabled={status === 'uploading' || rows.length === 0}>
-          {status === 'uploading' ? 'Uploading & Syncing…' : 'Import & Sync'}
-        </Button>
         {message && <div className="text-sm text-muted">{message}</div>}
       </CardContent>
     </Card>

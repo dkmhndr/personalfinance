@@ -19,7 +19,7 @@ const TIME_ONLY_REGEX = /^\d{1,2}[.:]\d{2}$/;
 const MONTH_YEAR_ONLY_REGEX =
   /^(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember|Jan|Feb|Mar|Apr|Jun|Jul|Agu|Agt|Aug|Sep|Sept|Okt|Oct|Nov|Des|Dec)\s+\d{4}$/i;
 const MONEY_TOKEN_REGEX =
-  /[+-]?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|[+-]?\d+(?:[.,]\d{1,2})?|[+-]?0/g;
+  /[+-]?\d{1,3}(?:\.\d{3})+,\d{2}|[+-]?\d{1,3}(?:,\d{3})+\.\d{2}|[+-]?\d{1,3}(?:\.\d{3})+|[+-]?\d{1,3}(?:,\d{3})+|[+-]?\d+(?:[.,]\d{1,2})?|[+-]?0/g;
 const RINCIAN_KEYWORD_REGEX =
   /(Transfer Masuk|Transfer Keluar|Pembayaran|Bunga|Pajak|Cashback|Jago Pay|Top\s*Up|Tarik Tunai|Setor Tunai)/i;
 const RINCIAN_FALLBACK_REGEX =
@@ -111,6 +111,30 @@ function normalizeAmount(raw: string): number {
   const sign = value.startsWith("-") ? -1 : 1;
   const unsigned = value.replace(/^[+-]/, "");
 
+  // For positive amounts, ignore decimal fractions to reduce OCR separator issues.
+  // Example: +1.234,56 => 1234, +1234.00 => 1234, +1234 => 1234.
+  if (value.startsWith("+")) {
+    const lastComma = unsigned.lastIndexOf(",");
+    const lastDot = unsigned.lastIndexOf(".");
+    const lastSeparatorIndex = Math.max(lastComma, lastDot);
+
+    const integerPart =
+      lastSeparatorIndex >= 0 &&
+      unsigned.length - lastSeparatorIndex - 1 >= 1 &&
+      unsigned.length - lastSeparatorIndex - 1 <= 2
+        ? unsigned.slice(0, lastSeparatorIndex)
+        : unsigned;
+
+    const normalizedInteger = integerPart.replace(/[.,]/g, "");
+    const numericInteger = Number.parseFloat(normalizedInteger);
+
+    if (!Number.isFinite(numericInteger)) {
+      return Number.NaN;
+    }
+
+    return numericInteger;
+  }
+
   const commaCount = (unsigned.match(/,/g) ?? []).length;
   const dotCount = (unsigned.match(/\./g) ?? []).length;
 
@@ -146,6 +170,35 @@ function normalizeAmount(raw: string): number {
   }
 
   return sign * numeric;
+}
+
+function normalizeBalance(raw: string): number {
+  const value = raw.trim();
+
+  if (!value) {
+    return Number.NaN;
+  }
+
+  const unsigned = value.replace(/^[+-]/, "");
+  const lastComma = unsigned.lastIndexOf(",");
+  const lastDot = unsigned.lastIndexOf(".");
+  const lastSeparatorIndex = Math.max(lastComma, lastDot);
+
+  const integerPart =
+    lastSeparatorIndex >= 0 &&
+    unsigned.length - lastSeparatorIndex - 1 >= 1 &&
+    unsigned.length - lastSeparatorIndex - 1 <= 2
+      ? unsigned.slice(0, lastSeparatorIndex)
+      : unsigned;
+
+  const normalizedInteger = integerPart.replace(/[.,]/g, "");
+  const numericInteger = Number.parseFloat(normalizedInteger);
+
+  if (!Number.isFinite(numericInteger)) {
+    return Number.NaN;
+  }
+
+  return numericInteger;
 }
 
 function splitIntoTransactionBlocks(text: string): TransactionBlock[] {
@@ -205,6 +258,10 @@ function isMoneyToken(token: string): boolean {
   );
 }
 
+function extractMoneyTokens(line: string): string[] {
+  return (line.match(MONEY_TOKEN_REGEX) ?? []).filter(isMoneyToken);
+}
+
 function extractAmountInfo(lines: string[]): {
   jumlah: number | null;
   saldo: number | null;
@@ -219,21 +276,19 @@ function extractAmountInfo(lines: string[]): {
       return false;
     }
 
-    const tokens = line.match(MONEY_TOKEN_REGEX) ?? [];
-    return tokens.some(isMoneyToken);
+    const tokens = extractMoneyTokens(line);
+    return tokens.length > 0;
   });
 
   const amountLine =
     [...candidateLines].reverse().find((line) => {
-      const tokens = (line.match(MONEY_TOKEN_REGEX) ?? []).filter(isMoneyToken);
+      const tokens = extractMoneyTokens(line);
       return tokens.some((token) => /^[+-]/.test(token)) || tokens.length >= 2;
     }) ??
     candidateLines[candidateLines.length - 1] ??
     "";
 
-  const tokens = (amountLine.match(MONEY_TOKEN_REGEX) ?? []).filter(
-    isMoneyToken,
-  );
+  const tokens = extractMoneyTokens(amountLine);
 
   if (tokens.length === 0) {
     return { jumlah: null, saldo: null, amountLine };
@@ -244,14 +299,15 @@ function extractAmountInfo(lines: string[]): {
 
   if (signedToken) {
     const jumlah = normalizeAmount(signedToken);
-    const saldo = lastToken !== signedToken ? normalizeAmount(lastToken) : null;
+    const saldo =
+      lastToken !== signedToken ? normalizeBalance(lastToken) : null;
     return { jumlah, saldo, amountLine };
   }
 
   if (tokens.length >= 2) {
     return {
       jumlah: normalizeAmount(tokens[0]),
-      saldo: normalizeAmount(lastToken),
+      saldo: normalizeBalance(lastToken),
       amountLine,
     };
   }
@@ -374,7 +430,7 @@ function parseBankJagoBlock(block: TransactionBlock): StatementRow | null {
 
   const { jumlah, saldo, amountLine } = extractAmountInfo(safeLines);
 
-  const firstAmountToken = amountLine.match(MONEY_TOKEN_REGEX)?.[0] ?? "";
+  const firstAmountToken = extractMoneyTokens(amountLine)[0] ?? "";
   const catatanFromAmountLine = firstAmountToken
     ? amountLine.split(firstAmountToken)[0]
     : "";
