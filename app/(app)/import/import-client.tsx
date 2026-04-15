@@ -2,6 +2,7 @@
 
 import Papa from 'papaparse';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -55,6 +56,7 @@ function mapRow(row: Record<string, string>, idx: number): ParsedRow | null {
 }
 
 export default function ImportClient() {
+  const router = useRouter();
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [status, setStatus] = useState<'idle' | 'parsing' | 'uploading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -170,12 +172,12 @@ export default function ImportClient() {
     }
     const data = await res.json();
     setStatus('done');
-    if (data.synced && data.sync) {
-      setMessage(`Imported ${data.insertedRaw} rows. Sync: inserted ${data.sync?.inserted ?? 0}, skipped ${data.sync?.skipped ?? 0}`);
-      return;
-    }
-
-    setMessage(`Imported ${data.insertedRaw} rows without sync.`);
+    setMessage(
+      data.synced && data.sync
+        ? `Imported ${data.insertedRaw} rows. Sync: inserted ${data.sync?.inserted ?? 0}, skipped ${data.sync?.skipped ?? 0}`
+        : `Imported ${data.insertedRaw} rows without sync.`,
+    );
+    router.replace('/');
   };
 
   const exportCsv = () => {
@@ -233,18 +235,18 @@ export default function ImportClient() {
             <div className="text-sm text-muted">
               Preview & edit ({rows.length} rows). Choose “Import only” or “Import & Sync”.
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={() => upload(true)} disabled={status === 'uploading' || rows.length === 0}>
+                {status === 'uploading' ? 'Uploading & Syncing…' : 'Import & Sync'}
+              </Button>
+              <Button variant="outline" onClick={() => upload(false)} disabled={status === 'uploading' || rows.length === 0}>
+                {status === 'uploading' ? 'Uploading…' : 'Import only'}
+              </Button>
+              <Button variant="outline" onClick={exportCsv} disabled={rows.length === 0}>
+                Export to CSV
+              </Button>
+            </div>
             <div className="max-h-[65vh] overflow-auto border rounded">
-              <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background p-2">
-                <Button onClick={() => upload(true)} disabled={status === 'uploading' || rows.length === 0}>
-                  {status === 'uploading' ? 'Uploading & Syncing…' : 'Import & Sync'}
-                </Button>
-                <Button variant="outline" onClick={() => upload(false)} disabled={status === 'uploading' || rows.length === 0}>
-                  {status === 'uploading' ? 'Uploading…' : 'Import only'}
-                </Button>
-                <Button variant="outline" onClick={exportCsv} disabled={rows.length === 0}>
-                  Export to CSV
-                </Button>
-              </div>
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 text-left">
