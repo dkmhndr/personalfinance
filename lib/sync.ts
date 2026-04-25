@@ -34,10 +34,29 @@ async function getFallbackCategoryId() {
   return data.id;
 }
 
+async function getTransferCategoryId() {
+  const { data, error } = await supabaseAdmin.from('categories').select('id').eq('name', 'Transfer').maybeSingle();
+  if (error) throw error;
+  return data?.id || null;
+}
+
 export async function syncBankStatements() {
   const accountId = await getDefaultAccountId();
   const fallbackCategory = await getFallbackCategoryId();
+  const transferCategoryId = await getTransferCategoryId();
   const dictionaries = await loadDictionaries();
+
+  // Backfill existing rows that were previously misclassified as income/expense.
+  const { error: fixErr } = await supabaseAdmin
+    .from('transactions')
+    .update({
+      type: 'transfer',
+      category_id: transferCategoryId,
+      categorization_source: 'rule',
+    })
+    .in('type', ['income', 'expense'])
+    .ilike('description', '%pindah uang antar kantong%');
+  if (fixErr) throw fixErr;
 
   const { data: existing } = await supabaseAdmin.from('transactions').select('source_id');
   const processedIds = new Set((existing || []).map((t) => t.source_id));
@@ -62,8 +81,8 @@ export async function syncBankStatements() {
   let processed = 0;
   for (const row of newRows || []) {
     const amount = Number(row.amount);
-    const type: TransactionType = mapBankType(row.type);
     const description = `${row.remark || ''} ${row.from_or_to || ''}`.trim();
+    const type: TransactionType = mapBankType(row.type, description);
     const categorization = await categorizeRecord(
       description,
       Math.abs(amount),

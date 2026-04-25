@@ -41,8 +41,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Remove old normalized row
   await supabaseAdmin.from('transactions').delete().eq('source_id', id);
 
-  const type = mapBankType(updated.type);
   const description = `${updated.remark || ''} ${updated.from_or_to || ''}`.trim();
+  const type = mapBankType(updated.type, description);
   const dictionaries = await loadDictionaries();
   const cat = await categorizeRecord(
     description,

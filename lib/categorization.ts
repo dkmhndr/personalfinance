@@ -107,7 +107,14 @@ export async function categorizeRecord(
   return { categoryId: fallbackCategoryId, source: 'none' as CategorizationSource };
 }
 
-export function mapBankType(type: string): TransactionType {
+function isPocketTransfer(description?: string | null) {
+  if (!description) return false;
+  const normalized = normalizeDescription(description);
+  return normalized.includes('PINDAH UANG ANTAR KANTONG');
+}
+
+export function mapBankType(type: string, description?: string | null): TransactionType {
+  if (isPocketTransfer(description)) return 'transfer';
   if (type?.toLowerCase() === 'cr') return 'income';
   if (type?.toLowerCase() === 'db') return 'expense';
   return 'transfer';
