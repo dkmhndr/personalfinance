@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseStatementText, type StatementRow } from '@/lib/statement-parser';
 
 // Use CJS export from pdf-parse v1.x (function)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdfParse: (buffer: Buffer) => Promise<{ text: string }> = require('pdf-parse');
 
 // Minimal DOMMatrix polyfill for pdfjs inside pdf-parse
 if (typeof (globalThis as any).DOMMatrix === 'undefined') {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const dm = require('@thednp/dommatrix');
     const ctor = dm.DOMMatrix || dm.DOMMatrixReadOnly || dm.default || dm;
     (globalThis as any).DOMMatrix = ctor;

@@ -88,7 +88,7 @@ export function TransactionsTable({ data, categories, onManualChange, hide }: Pr
         size: 120,
       },
     ],
-    [categories, onManualChange],
+    [categories, onManualChange, hide],
   );
 
   const [sorting, setSorting] = React.useState<SortingState>([{ id: 'transaction_at', desc: true }]);
