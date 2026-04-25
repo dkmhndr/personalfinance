@@ -53,6 +53,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     dictionaries,
     true,
   );
+  const categoryType = dictionaries.categories.find((c) => c.id === cat.categoryId)?.type;
+  const normalizedType = categoryType === 'transfer' ? 'transfer' : type;
 
   const { error: insErr } = await supabaseAdmin.from('transactions').insert({
     id: crypto.randomUUID(),
@@ -61,7 +63,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     transaction_at: updated.transaction_at || updated.created_at,
     description,
     amount: Math.abs(Number(updated.amount)),
-    type,
+    type: normalizedType,
     balance: updated.balance,
     category_id: cat.categoryId,
     categorization_source: cat.source,

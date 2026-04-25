@@ -1,10 +1,27 @@
 import { supabaseAdmin } from './supabase';
 import type { PostgrestSingleResponse } from '@supabase/supabase-js';
 import { type DashboardFilters } from '@/types';
+import { normalizeDescription } from './utils';
 
 const baseSelect = '*, categories(*), accounts(name)';
 
 const PAGE_SIZE = 1000; // PostgREST per-request cap is 1000 rows
+
+type TransferAwareRow = {
+  type: string;
+  description?: string | null;
+  categories?: { name?: string | null; type?: string | null } | null;
+};
+
+function isTransferLike(row: TransferAwareRow) {
+  if (row.type === 'transfer') return true;
+  if (row.categories?.type === 'transfer') return true;
+  if (String(row.categories?.name || '').toLowerCase() === 'transfer') return true;
+
+  const normalized = normalizeDescription(row.description || '');
+  if (!normalized) return false;
+  return normalized.includes('PINDAH UANG ANTAR KANTONG') || normalized.includes('ANTAR KANTONG');
+}
 
 function applyFilters(query: any, filters: DashboardFilters) {
   if (filters.startDate) query = query.gte('transaction_at', filters.startDate);
@@ -40,45 +57,36 @@ async function fetchAll<T = any>(
 }
 
 export async function fetchSummary(filters: DashboardFilters) {
-  const data = await fetchAll<{ amount: number; type: string; transaction_at: string }>((from, to) =>
+  const data = await fetchAll<{
+    amount: number;
+    type: string;
+    transaction_at: string;
+    description: string | null;
+    categories: { name: string | null; type: string | null } | null;
+  }>((from, to) =>
     applyFilters(
-      supabaseAdmin.from('transactions').select('amount,type,transaction_at').range(from, to),
+      supabaseAdmin.from('transactions').select('amount,type,transaction_at,description,categories(name,type)').range(from, to),
       filters,
     ),
   );
-  const totalIncome = data.filter((d: any) => d.type === 'income').reduce((sum: number, d: any) => sum + Number(d.amount), 0);
-  const totalExpense = data.filter((d: any) => d.type === 'expense').reduce((sum: number, d: any) => sum + Number(d.amount), 0);
-  const incomeCount = data.filter((d: any) => d.type === 'income').length;
-  const expenseCount = data.filter((d: any) => d.type === 'expense').length;
+  const nonTransferData = data.filter((d) => !isTransferLike(d));
+  const incomeRows = nonTransferData.filter((d) => d.type === 'income');
+  const expenseRows = nonTransferData.filter((d) => d.type === 'expense');
 
-  // Avg daily spending based on expenses only
+  const totalIncome = incomeRows.reduce((sum, d) => sum + Number(d.amount), 0);
+  const totalExpense = expenseRows.reduce((sum, d) => sum + Number(d.amount), 0);
+  const incomeCount = incomeRows.length;
+  const expenseCount = expenseRows.length;
+
+  // Avg daily spending based on non-transfer expenses only
   let avgDailySpending = 0;
-  try {
-    const { data: spanData, error: spanErr } = await applyFilters(
-      supabaseAdmin
-        .from('transactions')
-        .select('min_date:min(transaction_at),max_date:max(transaction_at),sum_expense:sum(amount)')
-        .eq('type', 'expense'),
-      { ...filters, type: 'expense' },
-    ).maybeSingle();
-    if (spanErr) throw spanErr;
-    if (spanData?.min_date && spanData?.max_date) {
-      const start = filters.startDate ? new Date(filters.startDate) : new Date(spanData.min_date);
-      const end = filters.endDate ? new Date(filters.endDate) : new Date(spanData.max_date);
-      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-      avgDailySpending = Number(spanData.sum_expense || 0) / days;
-    }
-  } catch {
-    // fallback: derive from already-fetched expense data
-    const expenseRows = data.filter((d) => d.type === 'expense');
-    if (expenseRows.length > 0) {
-      const minTs = Math.min(...expenseRows.map((d) => new Date(d.transaction_at).getTime()));
-      const maxTs = Math.max(...expenseRows.map((d) => new Date(d.transaction_at).getTime()));
-      const start = filters.startDate ? new Date(filters.startDate) : new Date(minTs);
-      const end = filters.endDate ? new Date(filters.endDate) : new Date(maxTs);
-      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-      avgDailySpending = expenseRows.reduce((s, r) => s + Number(r.amount), 0) / days;
-    }
+  if (expenseRows.length > 0) {
+    const minTs = Math.min(...expenseRows.map((d) => new Date(d.transaction_at).getTime()));
+    const maxTs = Math.max(...expenseRows.map((d) => new Date(d.transaction_at).getTime()));
+    const start = filters.startDate ? new Date(filters.startDate) : new Date(minTs);
+    const end = filters.endDate ? new Date(filters.endDate) : new Date(maxTs);
+    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    avgDailySpending = totalExpense / days;
   }
 
   // derive compare range: explicit provided or shift 1 year back
@@ -99,14 +107,20 @@ export async function fetchSummary(filters: DashboardFilters) {
       startDate: compareStart,
       endDate: compareEnd,
     };
-    const compData = await fetchAll<{ amount: number; type: string }>((from, to) =>
+    const compData = await fetchAll<{
+      amount: number;
+      type: string;
+      description: string | null;
+      categories: { name: string | null; type: string | null } | null;
+    }>((from, to) =>
       applyFilters(
-        supabaseAdmin.from('transactions').select('amount,type').range(from, to),
+        supabaseAdmin.from('transactions').select('amount,type,description,categories(name,type)').range(from, to),
         compFilters,
       ),
     );
-    compareIncome = compData.filter((d) => d.type === 'income').reduce((s, d) => s + Number(d.amount), 0);
-    compareExpense = compData.filter((d) => d.type === 'expense').reduce((s, d) => s + Number(d.amount), 0);
+    const nonTransferCompData = compData.filter((d) => !isTransferLike(d));
+    compareIncome = nonTransferCompData.filter((d) => d.type === 'income').reduce((s, d) => s + Number(d.amount), 0);
+    compareExpense = nonTransferCompData.filter((d) => d.type === 'expense').reduce((s, d) => s + Number(d.amount), 0);
   }
 
   return {
@@ -124,11 +138,16 @@ export async function fetchSummary(filters: DashboardFilters) {
 
 export async function fetchExpenseByCategory(filters: DashboardFilters) {
   const expenseFilters: DashboardFilters = { ...filters, type: undefined };
-  const data = await fetchAll<{ amount: number; categories: { name: string; type: string } | null }>((from, to) =>
+  const data = await fetchAll<{
+    amount: number;
+    type: string;
+    description: string | null;
+    categories: { name: string; type: string } | null;
+  }>((from, to) =>
     applyFilters(
       supabaseAdmin
         .from('transactions')
-        .select('amount,categories(name,type)')
+        .select('amount,type,description,categories(name,type)')
         .eq('type', 'expense')
         .range(from, to),
       expenseFilters,
@@ -136,6 +155,7 @@ export async function fetchExpenseByCategory(filters: DashboardFilters) {
   );
   const map: Record<string, number> = {};
   data.forEach((row: any) => {
+    if (isTransferLike(row)) return;
     const name = row.categories?.name || 'Uncategorized';
     if (name === 'Transfer' || row.categories?.type === 'transfer') return;
     map[name] = (map[name] || 0) + Number(row.amount);
@@ -146,15 +166,22 @@ export async function fetchExpenseByCategory(filters: DashboardFilters) {
 export async function fetchCashflowTrend(filters: DashboardFilters) {
   // Aggregate directly from filtered transactions so the cashflow chart
   // always honors date/category/source/type filters consistently.
-  const data = await fetchAll<{ amount: number; type: string; transaction_at: string }>((from, to) =>
+  const data = await fetchAll<{
+    amount: number;
+    type: string;
+    transaction_at: string;
+    description: string | null;
+    categories: { name: string | null; type: string | null } | null;
+  }>((from, to) =>
     applyFilters(
-      supabaseAdmin.from('transactions').select('amount,type,transaction_at').range(from, to),
+      supabaseAdmin.from('transactions').select('amount,type,transaction_at,description,categories(name,type)').range(from, to),
       filters,
     ),
   );
 
   const map: Record<string, { income: number; expense: number }> = {};
   data.forEach((row) => {
+    if (isTransferLike(row)) return;
     const key = row.transaction_at.slice(0, 7); // YYYY-MM
     if (!map[key]) map[key] = { income: 0, expense: 0 };
     if (row.type === 'income') map[key].income += Number(row.amount);
@@ -179,12 +206,18 @@ export async function fetchTransactions(filters: DashboardFilters, page = 1, pag
 export async function fetchDailySpending(filters: DashboardFilters) {
   const bucket = filters.bucket || 'day';
   const expenseFilters: DashboardFilters = { ...filters, type: undefined };
-  const data = await fetchAll<{ amount: number; transaction_at: string; categories: { name: string; type: string } | null }>(
+  const data = await fetchAll<{
+    amount: number;
+    type: string;
+    description: string | null;
+    transaction_at: string;
+    categories: { name: string; type: string } | null;
+  }>(
     (from, to) =>
       applyFilters(
         supabaseAdmin
           .from('transactions')
-          .select('amount,transaction_at,categories(name,type)')
+          .select('amount,type,description,transaction_at,categories(name,type)')
           .eq('type', 'expense')
           .range(from, to),
         expenseFilters,
@@ -192,6 +225,7 @@ export async function fetchDailySpending(filters: DashboardFilters) {
   );
   const map: Record<string, number> = {};
   data.forEach((row: any) => {
+    if (isTransferLike(row)) return;
     if (row.categories?.name === 'Transfer' || row.categories?.type === 'transfer') return;
     const iso = row.transaction_at;
     const key = bucket === 'month' ? iso.slice(0, 7) : iso.slice(0, 10); // slice to avoid tz shift

@@ -58,6 +58,16 @@ export async function syncBankStatements() {
     .ilike('description', '%pindah uang antar kantong%');
   if (fixErr) throw fixErr;
 
+  // Also normalize any rows already categorized as Transfer but still typed as income/expense.
+  if (transferCategoryId) {
+    const { error: fixTransferTypeErr } = await supabaseAdmin
+      .from('transactions')
+      .update({ type: 'transfer' })
+      .eq('category_id', transferCategoryId)
+      .in('type', ['income', 'expense']);
+    if (fixTransferTypeErr) throw fixTransferTypeErr;
+  }
+
   const { data: existing } = await supabaseAdmin.from('transactions').select('source_id');
   const processedIds = new Set((existing || []).map((t) => t.source_id));
 
@@ -92,6 +102,8 @@ export async function syncBankStatements() {
       dictionaries,
       enableAI,
     );
+    const categoryType = dictionaries.categories.find((c) => c.id === categorization.categoryId)?.type;
+    const normalizedType: TransactionType = categoryType === 'transfer' ? 'transfer' : type;
 
     buffer.push({
       id: crypto.randomUUID(),
@@ -100,7 +112,7 @@ export async function syncBankStatements() {
       transaction_at: row.transaction_at || row.created_at,
       description,
       amount: Math.abs(amount),
-      type,
+      type: normalizedType,
       balance: row.balance,
       category_id: categorization.categoryId,
       categorization_source: categorization.source,
@@ -126,9 +138,24 @@ export async function syncBankStatements() {
 }
 
 export async function overrideTransactionCategory(transactionId: string, categoryId: string) {
+  const { data: category, error: catErr } = await supabaseAdmin
+    .from('categories')
+    .select('type')
+    .eq('id', categoryId)
+    .maybeSingle();
+  if (catErr) throw catErr;
+
+  const patch: { category_id: string; categorization_source: 'manual'; type?: TransactionType } = {
+    category_id: categoryId,
+    categorization_source: 'manual',
+  };
+  if (category?.type === 'transfer') {
+    patch.type = 'transfer';
+  }
+
   const { error } = await supabaseAdmin
     .from('transactions')
-    .update({ category_id: categoryId, categorization_source: 'manual' })
+    .update(patch)
     .eq('id', transactionId);
   if (error) throw error;
 }
